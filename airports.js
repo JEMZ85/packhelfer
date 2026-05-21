@@ -12,6 +12,7 @@ const AIRPORTS = [
   ['STR','Stuttgart','DE',48.6899,9.2220],
   ['NUE','Nürnberg','DE',49.4987,11.0669],
   ['HAJ','Hannover','DE',52.4611,9.6850],
+  ['DRS','Dresden','DE',51.1328,13.7672],
   ['BRE','Bremen','DE',53.0475,8.7867],
   ['LEJ','Leipzig','DE',51.4241,12.2364],
   ['DTM','Dortmund','DE',51.5183,7.6122],
@@ -49,6 +50,7 @@ const AIRPORTS = [
   ['NCL','Newcastle','GB',55.0375,-1.6917],
   ['LPL','Liverpool','GB',53.3336,-2.8497],
   ['ABZ','Aberdeen','GB',57.2019,-2.1978],
+  ['DUB','Dublin','IE',53.4213,-6.2700],
 
   // ── Frankreich ────────────────────────────────────────────────────────────────
   ['CDG','Paris Charles de Gaulle','FR',49.0128,2.5500],
@@ -113,6 +115,7 @@ const AIRPORTS = [
   ['BLQ','Bologna','IT',44.5354,11.2887],
   ['PSA','Pisa (Florenz)','IT',43.6839,10.3927],
   ['FLR','Florenz','IT',43.8100,11.2051],
+  ['MLA','Malta','MT',35.8575,14.4775],
   ['NAP','Neapel','IT',40.8860,14.2908],
   ['CTA','Catania','IT',37.4668,15.0664],
   ['PMO','Palermo','IT',38.1760,13.0910],
@@ -148,6 +151,7 @@ const AIRPORTS = [
 
   // ── Skandinavien ─────────────────────────────────────────────────────────────
   ['CPH','Kopenhagen','DK',55.6180,12.6560],
+  ['BLL','Billund','DK',55.7403,9.1519],
   ['ARN','Stockholm Arlanda','SE',59.6519,17.9186],
   ['GOT','Göteborg','SE',57.6628,12.2798],
   ['MMX','Malmö','SE',55.5363,13.3762],
@@ -174,8 +178,11 @@ const AIRPORTS = [
   // ── Balkan / Osteuropa ────────────────────────────────────────────────────────
   ['SOF','Sofia','BG',42.6967,23.4114],
   ['OTP','Bukarest','RO',44.5722,26.1022],
+  ['CLJ','Cluj-Napoca','RO',46.7852,23.6862],
   ['BEG','Belgrad','RS',44.8184,20.3091],
   ['ZAG','Zagreb','HR',45.7429,16.0688],
+  ['LJU','Ljubljana','SI',46.2237,14.4576],
+  ['TIA','Tirana','AL',41.4147,19.7206],
   ['DBV','Dubrovnik','HR',42.5614,18.2681],
   ['SPU','Split','HR',43.5389,16.2998],
   ['SKP','Skopje','MK',41.9614,21.6214],
@@ -203,6 +210,8 @@ const AIRPORTS = [
   ['TBS','Tiflis','GE',41.6692,44.9547],
   ['EVN','Jerewan','AM',40.1473,44.3959],
   ['GYD','Baku','AZ',40.4675,50.0467],
+  ['ALA','Almaty','KZ',43.3521,77.0406],
+  ['NQZ','Nur-Sultan','KZ',51.0222,71.4669],
 
   // ── Nordafrika ────────────────────────────────────────────────────────────────
   ['CAI','Kairo','EG',30.1219,31.4056],
@@ -229,6 +238,8 @@ const AIRPORTS = [
   ['CPT','Kapstadt','ZA',-33.9649,18.6017],
   ['DUR','Durban','ZA',-29.6144,31.1197],
   ['LOS','Lagos','NG',6.5774,3.3212],
+  ['PHC','Port Harcourt','NG',5.0155,6.9496],
+  ['SSG','Malabo','GQ',3.7553,8.7087],
   ['ABV','Abuja','NG',9.0068,7.2632],
   ['ACC','Accra','GH',5.6052,-0.1668],
   ['ABJ','Abidjan','CI',5.2613,-3.9263],
