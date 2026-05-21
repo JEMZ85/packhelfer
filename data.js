@@ -22,7 +22,8 @@ const SPORTS = [
   { id: 'flag',      label: 'Flag Football', emoji: '🏈' },
   { id: 'kraft',     label: 'Krafttraining', emoji: '🏋️' },
   { id: 'schwimmen', label: 'Schwimmen',     emoji: '🏊' },
-  { id: 'wandern',   label: 'Wandern',       emoji: '🥾' }
+  { id: 'wandern',   label: 'Wandern',       emoji: '🥾' },
+  { id: 'paragliden',label: 'Paragliden',    emoji: '🪂' }
 ];
 
 const WEATHER_ICONS = {
@@ -46,6 +47,8 @@ const WEATHER_ICONS = {
 // rainOnly:           erscheint nur wenn Regen im Forecast
 // minTemp:            erscheint nur wenn max Tagestemperatur >= minTemp
 // maxTempThreshold:   erscheint nur wenn max Tagestemperatur < maxTempThreshold
+// coldTempThreshold:  bei sportOnly-Items: erscheint zusätzlich wenn maxTemp < Schwelle (OR-Logik)
+// nonSchuko:          erscheint nur wenn nonSchuko-Option aktiv
 const DEFAULT_ITEMS = [
 
   // ── KLEIDUNG ─────────────────────────────────────────────────────────────────
@@ -87,25 +90,27 @@ const DEFAULT_ITEMS = [
     contexts: ['reise','layover','hamburg'],     vorOrtContexts: ['hamburg'] },
 
   { id: 'wanderhose',   name: 'Wanderhose',       category: 'Kleidung', scaleable: false, baseQty: 1,
-    contexts: ['reise','camper'],               vorOrtContexts: [] },
+    contexts: ['reise','camper'],               vorOrtContexts: [],
+    sportOnly: true, sportIds: ['wandern','paragliden'] },
 
   { id: 'lange-unter',  name: 'Lange Unterhose',  category: 'Kleidung', scaleable: false, baseQty: 1,
-    contexts: ['reise','camper'],               vorOrtContexts: [] },
+    contexts: ['reise','camper'],               vorOrtContexts: [], maxTempThreshold: 10 },
 
   { id: 'muetze',       name: 'Mütze',            category: 'Kleidung', scaleable: false, baseQty: 1,
-    contexts: ['reise','camper','hamburg'],      vorOrtContexts: ['hamburg'] },
+    contexts: ['reise','camper','hamburg'],      vorOrtContexts: ['hamburg'], maxTempThreshold: 10 },
 
   { id: 'cap',          name: 'Cap',              category: 'Kleidung', scaleable: false, baseQty: 1,
     contexts: ['reise','camper','hamburg'],      vorOrtContexts: ['hamburg'] },
 
   { id: 'handschuhe',   name: 'Handschuhe',       category: 'Kleidung', scaleable: false, baseQty: 1,
-    contexts: ['reise','camper'],               vorOrtContexts: [] },
+    contexts: ['reise','camper'],               vorOrtContexts: [], maxTempThreshold: 5 },
 
   { id: 'buff',         name: 'Buff',             category: 'Kleidung', scaleable: false, baseQty: 1,
-    contexts: ['reise','camper'],               vorOrtContexts: [] },
+    contexts: ['reise','camper'],               vorOrtContexts: [], maxTempThreshold: 10 },
 
   { id: 'rucksackcape', name: 'Rucksackcape',     category: 'Kleidung', scaleable: false, baseQty: 1,
-    contexts: ['reise'],                        vorOrtContexts: [] },
+    contexts: ['reise'],                        vorOrtContexts: [],
+    sportOnly: true, sportIds: ['wandern','paragliden'] },
 
   // Dresscode-Items
   { id: 'sakko',        name: 'Sakko / Blazer',          category: 'Kleidung', scaleable: false, baseQty: 1,
@@ -147,7 +152,8 @@ const DEFAULT_ITEMS = [
   // ── SCHUHE ───────────────────────────────────────────────────────────────────
 
   { id: 'wanderschuhe', name: 'Wanderschuhe',     category: 'Schuhe',   scaleable: false, baseQty: 1,
-    contexts: ['reise','camper'],               vorOrtContexts: ['camper'] },
+    contexts: ['reise','camper'],               vorOrtContexts: ['camper'],
+    sportOnly: true, sportIds: ['wandern','paragliden'], coldTempThreshold: 5 },
 
   { id: 'sneaker',      name: 'Sneaker',          category: 'Schuhe',   scaleable: false, baseQty: 1,
     contexts: ['reise','layover','camper','hamburg'], vorOrtContexts: ['hamburg'] },
@@ -207,7 +213,7 @@ const DEFAULT_ITEMS = [
     contexts: ['reise','layover','camper','hamburg'], vorOrtContexts: [] },
 
   { id: 'socket',       name: 'Reiseadapter',     category: 'Elektro',  scaleable: false, baseQty: 1,
-    contexts: ['reise','layover'],              vorOrtContexts: [] },
+    contexts: ['reise','layover'],              vorOrtContexts: [], nonSchuko: true },
 
   { id: 'powerbank',    name: 'Powerbank',        category: 'Elektro',  scaleable: false, baseQty: 1,
     contexts: ['reise','layover','camper','hamburg'], vorOrtContexts: [] },

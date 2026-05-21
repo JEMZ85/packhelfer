@@ -86,17 +86,22 @@ function weatherHasRain(weather) {
 }
 
 function buildTripItems(context, days, opts = {}) {
-  const { sports = [], dresscodes = [], waschen = true, laptop = false, uniformiert = true, weather = null } = opts;
+  const { sports = [], dresscodes = [], waschen = true, laptop = false, uniformiert = true, weather = null, nonSchuko = false } = opts;
   const maxTemp = weatherMaxTemp(weather);
   const hasRain = weatherHasRain(weather);
   const items = [];
   for (const master of state.masterItems) {
     if (!master.contexts.includes(context)) continue;
-    if (master.sportOnly && !master.sportIds.some(s => sports.includes(s))) continue;
+    if (master.sportOnly) {
+      const sportMatch = master.sportIds.some(s => sports.includes(s));
+      const coldBypass = master.coldTempThreshold != null && maxTemp != null && maxTemp < master.coldTempThreshold;
+      if (!sportMatch && !coldBypass) continue;
+    }
     if (master.dresscodeOnly && !master.dresscodeIds.some(d => dresscodes.includes(d))) continue;
     if (master.laptopOnly && !laptop) continue;
     if (master.uniformVollstaendig && uniformiert) continue;
     if (master.rainOnly && !hasRain) continue;
+    if (master.nonSchuko && !nonSchuko) continue;
     if (master.minTemp != null && maxTemp != null && maxTemp < master.minTemp) continue;
     if (master.maxTempThreshold != null && maxTemp != null && maxTemp >= master.maxTempThreshold) continue;
     let qty = calcQty(master, days, waschen);
@@ -123,6 +128,7 @@ function createTrip(setup) {
     waschen: setup.waschen ?? true,
     laptop: setup.laptop ?? false,
     uniformiert: setup.uniformiert ?? true,
+    nonSchuko: setup.nonSchuko ?? false,
     weather: setup.weather ?? null,
   });
   return {
@@ -381,6 +387,9 @@ function renderSetup2() {
           </button>
           <button class="sport-chip ${state.setup.laptop ? 'selected' : ''}" data-action="toggle-laptop">
             💻 Mit Laptop
+          </button>
+          <button class="sport-chip ${state.setup.nonSchuko ? 'selected' : ''}" data-action="toggle-nonschuko">
+            🔌 Nicht-Schuko Land
           </button>
           ${isLayover ? `
           <button class="sport-chip ${state.setup.uniformiert ? 'selected' : ''}" data-action="toggle-uniformiert">
@@ -681,7 +690,7 @@ function handleClick(e) {
       state.setup = {
         context: null, destination: '', startDate: todayStr(),
         days: 3, layoverDuration: '72h', sports: [], dresscodes: [],
-        waschen: true, laptop: false, uniformiert: true,
+        waschen: true, laptop: false, uniformiert: true, nonSchuko: false,
         stops: [], acQuery: '', acResults: [], focusIata: false,
         weather: null, weatherLoading: false, weatherError: null
       };
@@ -778,6 +787,10 @@ function handleClick(e) {
 
     case 'toggle-uniformiert':
       state.setup.uniformiert = !state.setup.uniformiert;
+      render(); break;
+
+    case 'toggle-nonschuko':
+      state.setup.nonSchuko = !state.setup.nonSchuko;
       render(); break;
 
     case 'check-all-cat': {
