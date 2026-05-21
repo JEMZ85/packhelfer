@@ -392,6 +392,25 @@ html, body {
 
 .cat-count { font-size: 12px; color: var(--text2); }
 
+.cat-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-check-all {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--green-dark);
+  background: var(--green-bg);
+  border: 1px solid var(--green);
+  border-radius: 10px;
+  padding: 2px 8px;
+  cursor: pointer;
+  line-height: 1.4;
+}
+.btn-check-all:active { opacity: 0.7; }
+
 /* ── Item rows ────────────────────────────────────────────── */
 
 .item-row {
@@ -556,3 +575,147 @@ html, body {
 .btn-danger:active { background: #FFE0E0; }
 
 .edit-spacer { height: 60px; }
+
+/* ── IATA stops input ─────────────────────────────────────── */
+
+.stops-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.stop-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px 6px 12px;
+  background: #EBF4FF;
+  border: 1.5px solid var(--primary);
+  border-radius: 20px;
+  font-size: 14px;
+  color: var(--primary);
+}
+
+.stop-remove {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-size: 18px;
+  line-height: 1;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0 2px;
+  opacity: 0.7;
+}
+.stop-remove:active { opacity: 1; }
+
+.iata-wrap {
+  position: relative;
+}
+
+.ac-dropdown {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  background: var(--card);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.14);
+  z-index: 100;
+  overflow: hidden;
+}
+
+.ac-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 16px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  text-align: left;
+  font-size: 15px;
+  color: var(--text);
+}
+.ac-item:last-child { border-bottom: none; }
+.ac-item:active { background: var(--bg); }
+
+.ac-flag { font-size: 20px; flex-shrink: 0; }
+.ac-iata { font-weight: 700; color: var(--primary); min-width: 38px; flex-shrink: 0; }
+.ac-city { flex: 1; }
+
+/* ── Date note in weather card ────────────────────────────── */
+
+.weather-date-note {
+  font-size: 12px;
+  color: var(--text2);
+  margin-bottom: 8px;
+}
+
+/* ── Layover per-stop weather ─────────────────────────────── */
+
+.layover-weather {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lw-stop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.lw-stop-label {
+  font-size: 14px;
+  flex: 1;
+}
+
+.lw-stop-day {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lw-dow  { font-size: 12px; color: var(--text2); min-width: 22px; }
+.lw-icon { font-size: 22px; }
+.lw-temp { font-size: 14px; font-weight: 700; }
+.lw-min  { font-weight: 400; color: var(--text2); }
+.lw-na   { font-size: 13px; color: var(--text2); }
+
+/* ── Layover duration chips ───────────────────────────────── */
+
+.duration-chips {
+  display: flex;
+  gap: 8px;
+}
+
+.dur-chip {
+  padding: 10px 20px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--text);
+  transition: all 0.15s;
+}
+.dur-chip.selected {
+  border-color: var(--primary);
+  background: #EBF4FF;
+  color: var(--primary);
+}
+.dur-chip:active { opacity: 0.7; }
+
+.duration-auto {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text2);
+  padding: 10px 0;
+}

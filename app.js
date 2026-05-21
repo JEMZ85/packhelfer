@@ -8,16 +8,26 @@ let state = {
   setup: {
     context: null,
     destination: '',
-    days: 3,
+    startDate: '',      // YYYY-MM-DD, filled in init()
+    days: 2,
+    layoverDuration: '72h',  // single-stop layover: '24h' | '72h' | '48h'
     sports: [],
+    dresscodes: [],
+    waschen: true,
+    laptop: false,
+    uniformiert: true,
+    stops: [],          // layover: [{iata, city, country, lat, lon}]
+    acQuery: '',        // layover autocomplete: current query
+    acResults: [],      // layover autocomplete: current results
+    focusIata: false,   // signal afterRender to re-focus iata input
     weather: null,
     weatherLoading: false,
     weatherError: null
   },
   currentTripId: null,
   trips: [],
-  masterItems: null,  // loaded on init
-  vorOrtExpanded: false,
+  masterItems: null,
+  vorOrtExpanded: null,  // null = use context default
   editExpandedId: null,
 };
 
@@ -40,6 +50,10 @@ function loadState() {
     state.currentTripId = saved.currentTripId ?? null;
     state.trips = saved.trips ?? [];
     state.masterItems = saved.masterItems ?? null;
+    // migrate old context IDs
+    for (const trip of state.trips) {
+      if (trip.context === 'urlaub' || trip.context === 'wochenend') trip.context = 'reise';
+    }
   } catch (e) {
     console.warn('State load failed', e);
   }
@@ -47,21 +61,52 @@ function loadState() {
 
 // ─── Trip logic ───────────────────────────────────────────────────────────────
 
-function calcQty(item, days) {
+function calcQty(item, days, waschen) {
   if (!item.scaleable) return item.baseQty;
-  return Math.min(days * item.scalePerDay, item.maxQty);
+  const max = (waschen && item.washMaxQty != null) ? item.washMaxQty : item.maxQty;
+  return Math.min(days * item.scalePerDay, max);
 }
 
-function buildTripItems(context, sports, days) {
+function weatherMaxTemp(weather) {
+  if (!weather) return null;
+  if (weather.isLayover) {
+    const temps = (weather.stops || []).filter(s => s.day).map(s => s.day.max);
+    return temps.length ? Math.max(...temps) : null;
+  }
+  const temps = (weather.forecast || []).map(d => d.max);
+  return temps.length ? Math.max(...temps) : null;
+}
+
+function weatherHasRain(weather) {
+  if (!weather) return false;
+  const days = weather.isLayover
+    ? (weather.stops || []).filter(s => s.day).map(s => s.day)
+    : (weather.forecast || []);
+  return days.some(d => d.code >= 51);
+}
+
+function buildTripItems(context, days, opts = {}) {
+  const { sports = [], dresscodes = [], waschen = true, laptop = false, uniformiert = true, weather = null } = opts;
+  const maxTemp = weatherMaxTemp(weather);
+  const hasRain = weatherHasRain(weather);
   const items = [];
   for (const master of state.masterItems) {
     if (!master.contexts.includes(context)) continue;
     if (master.sportOnly && !master.sportIds.some(s => sports.includes(s))) continue;
+    if (master.dresscodeOnly && !master.dresscodeIds.some(d => dresscodes.includes(d))) continue;
+    if (master.laptopOnly && !laptop) continue;
+    if (master.uniformVollstaendig && uniformiert) continue;
+    if (master.rainOnly && !hasRain) continue;
+    if (master.minTemp != null && maxTemp != null && maxTemp < master.minTemp) continue;
+    if (master.maxTempThreshold != null && maxTemp != null && maxTemp >= master.maxTempThreshold) continue;
+    let qty = calcQty(master, days, waschen);
+    if (master.uniformWechsel && uniformiert) qty = Math.max(0, qty - 1);
+    if (qty === 0) continue;
     items.push({
       id: master.id,
       name: master.name,
       category: master.category,
-      qty: calcQty(master, days),
+      qty,
       vorhanden: false,
       eingepackt: false,
       vorOrt: (master.vorOrtContexts || []).includes(context)
@@ -72,14 +117,23 @@ function buildTripItems(context, sports, days) {
 
 function createTrip(setup) {
   const id = Date.now().toString();
-  const items = buildTripItems(setup.context, setup.sports, setup.days);
+  const items = buildTripItems(setup.context, setup.days, {
+    sports: setup.sports,
+    dresscodes: setup.dresscodes || [],
+    waschen: setup.waschen ?? true,
+    laptop: setup.laptop ?? false,
+    uniformiert: setup.uniformiert ?? true,
+    weather: setup.weather ?? null,
+  });
   return {
     id,
     createdAt: id,
     context: setup.context,
     destination: setup.destination || '—',
     days: setup.days,
+    startDate: setup.startDate || null,
     sports: setup.sports,
+    dresscodes: setup.dresscodes || [],
     weather: setup.weather,
     items
   };
@@ -97,8 +151,6 @@ function tripProgress(trip) {
 
 // ─── Rendering ────────────────────────────────────────────────────────────────
 
-function el(id) { return document.getElementById(id); }
-
 function render() {
   const app = document.getElementById('app');
   switch (state.view) {
@@ -112,8 +164,14 @@ function render() {
 
 function afterRender() {
   if (state.view === 'setup' && state.setupStep === 2) {
-    const inp = document.getElementById('dest-input');
-    if (inp) inp.value = state.setup.destination;
+    const dest = document.getElementById('dest-input');
+    if (dest) dest.value = state.setup.destination;
+
+    if (state.setup.focusIata) {
+      state.setup.focusIata = false;
+      const iata = document.getElementById('iata-input');
+      if (iata) iata.focus();
+    }
   }
 }
 
@@ -136,7 +194,7 @@ function renderHome() {
           <span class="trip-ctx">${ctx.emoji} ${ctx.label}</span>
           ${weatherStr ? `<span class="trip-weather">${weatherStr}</span>` : ''}
         </div>
-        <div class="trip-dest">${trip.destination}</div>
+        <div class="trip-dest">${escHtml(trip.destination)}</div>
         <div class="trip-meta">${trip.days} Tag${trip.days !== 1 ? 'e' : ''} ${sportsStr}</div>
         <div class="progress-row">
           <span class="progress-label">${packed} / ${total} eingepackt</span>
@@ -158,7 +216,7 @@ function renderHome() {
       return `
         <div class="card past-trip" data-action="open-past" data-trip-id="${t.id}">
           <div class="past-trip-row">
-            <span>${ctx.emoji} <strong>${t.destination}</strong></span>
+            <span>${ctx.emoji} <strong>${escHtml(t.destination)}</strong></span>
             <span class="past-meta">${t.days}T · ${packed}/${total}</span>
           </div>
         </div>`;
@@ -194,37 +252,99 @@ function renderSetup1() {
         <button class="btn-back" data-action="go-home">←</button>
         <span class="nav-title">Neue Reise</span>
       </div>
-      <div class="section-title">Was für eine Reise?</div>
       <div class="context-grid">
         ${Object.entries(CONTEXTS).map(([id, ctx]) => `
           <button class="context-card ${state.setup.context === id ? 'selected' : ''}"
                   data-action="select-context" data-context="${id}">
             <span class="ctx-emoji">${ctx.emoji}</span>
             <span class="ctx-label">${ctx.label}</span>
-            <span class="ctx-desc">${ctx.desc}</span>
           </button>`).join('')}
       </div>
-      <button class="btn-primary ${!state.setup.context ? 'disabled' : ''}"
-              data-action="setup-next" ${!state.setup.context ? 'disabled' : ''}>
-        Weiter →
-      </button>
+    </div>`;
+}
+
+function renderIataInput() {
+  const { stops, acQuery, acResults } = state.setup;
+  return `
+    <div class="form-group">
+      <label class="form-label">Stops</label>
+      ${stops.length ? `
+        <div class="stops-list">
+          ${stops.map((s, i) => `
+            <div class="stop-chip">
+              <span>${countryFlag(s.country)}&nbsp;<strong>${escHtml(s.iata)}</strong>&nbsp;${escHtml(s.city)}</span>
+              <button class="stop-remove" data-action="remove-stop" data-stop-idx="${i}">×</button>
+            </div>`).join('')}
+        </div>` : ''}
+      <div class="iata-wrap">
+        <input id="iata-input" class="form-input" type="text"
+               placeholder="IATA oder Stadt (FRA, JFK…)"
+               value="${escHtml(acQuery)}"
+               autocomplete="off" autocorrect="off" autocapitalize="characters"
+               spellcheck="false"
+               data-action="iata-search">
+        ${acResults.length ? `
+          <div class="ac-dropdown">
+            ${acResults.map(([iata, city, country, lat, lon]) => `
+              <button class="ac-item" data-action="select-airport"
+                      data-iata="${iata}" data-city="${escAttr(city)}"
+                      data-country="${escAttr(country)}"
+                      data-lat="${lat}" data-lon="${lon}">
+                <span class="ac-flag">${countryFlag(country)}</span>
+                <span class="ac-iata">${iata}</span>
+                <span class="ac-city">${escHtml(city)}</span>
+              </button>`).join('')}
+          </div>` : ''}
+      </div>
     </div>`;
 }
 
 function renderSetup2() {
+  const isLayover = state.setup.context === 'layover';
   const days = state.setup.days;
+  const nonFRA = state.setup.stops.filter(s => s.iata !== 'FRA');
+  const canProceed = !isLayover || nonFRA.length > 0;
+
+  const destinationGroup = isLayover ? renderIataInput() : `
+    <div class="form-group">
+      <label class="form-label">Zielort</label>
+      <input id="dest-input" class="form-input" type="text" placeholder="z.B. Barcelona"
+             value="${escHtml(state.setup.destination)}" autocomplete="off" autocorrect="off"
+             data-action="input-destination">
+    </div>`;
+
   return `
     <div class="screen">
       <div class="nav-bar">
         <button class="btn-back" data-action="setup-back">←</button>
         <span class="nav-title">${CONTEXTS[state.setup.context].emoji} ${CONTEXTS[state.setup.context].label}</span>
       </div>
+      ${destinationGroup}
       <div class="form-group">
-        <label class="form-label">Zielort</label>
-        <input id="dest-input" class="form-input" type="text" placeholder="z.B. Barcelona"
-               value="${escHtml(state.setup.destination)}" autocomplete="off" autocorrect="off"
-               data-action="input-destination">
+        <label class="form-label">Abreise</label>
+        <input type="date" id="start-date" class="form-input"
+               value="${escAttr(state.setup.startDate)}"
+               min="${todayStr()}"
+               data-action="input-startdate">
       </div>
+      ${isLayover ? (() => {
+        if (nonFRA.length === 0) return '';
+        if (nonFRA.length >= 2) return `
+          <div class="form-group">
+            <label class="form-label">Dauer</label>
+            <div class="duration-auto">${nonFRA.length} Nächte</div>
+          </div>`;
+        const dur = state.setup.layoverDuration;
+        return `
+          <div class="form-group">
+            <label class="form-label">Dauer</label>
+            <div class="duration-chips">
+              <button class="dur-chip ${dur === '24h' ? 'selected' : ''}" data-action="select-duration" data-dur="24h">24h</button>
+              <button class="dur-chip ${dur === '48h' ? 'selected' : ''}" data-action="select-duration" data-dur="48h">48h</button>
+              <button class="dur-chip ${dur === '72h' ? 'selected' : ''}" data-action="select-duration" data-dur="72h">72h</button>
+            </div>
+          </div>`;
+      })() : `
       <div class="form-group">
         <label class="form-label">Wie viele Tage?</label>
         <div class="stepper">
@@ -232,7 +352,7 @@ function renderSetup2() {
           <span class="stepper-val">${days}</span>
           <button class="stepper-btn" data-action="days-plus">+</button>
         </div>
-      </div>
+      </div>`}
       <div class="form-group">
         <label class="form-label">Sport</label>
         <div class="sport-grid">
@@ -243,53 +363,104 @@ function renderSetup2() {
             </button>`).join('')}
         </div>
       </div>
-      <button class="btn-primary" data-action="setup-next">Weiter →</button>
+      <div class="form-group">
+        <label class="form-label">Dresscode</label>
+        <div class="sport-grid">
+          ${DRESSCODES.map(d => `
+            <button class="sport-chip ${state.setup.dresscodes.includes(d.id) ? 'selected' : ''}"
+                    data-action="toggle-dresscode" data-dresscode="${d.id}">
+              ${d.emoji} ${d.label}
+            </button>`).join('')}
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Optionen</label>
+        <div class="sport-grid">
+          <button class="sport-chip ${state.setup.waschen ? 'selected' : ''}" data-action="toggle-waschen">
+            🧺 Ich wasche unterwegs
+          </button>
+          <button class="sport-chip ${state.setup.laptop ? 'selected' : ''}" data-action="toggle-laptop">
+            💻 Mit Laptop
+          </button>
+          ${isLayover ? `
+          <button class="sport-chip ${state.setup.uniformiert ? 'selected' : ''}" data-action="toggle-uniformiert">
+            🛫 Uniformiert aus dem Haus
+          </button>` : ''}
+        </div>
+      </div>
+      <button class="btn-primary ${canProceed ? '' : 'disabled'}"
+              data-action="setup-next" ${canProceed ? '' : 'disabled'}>
+        Weiter →
+      </button>
     </div>`;
 }
 
 function renderSetup3() {
-  const { weather, weatherLoading, weatherError, destination, days } = state.setup;
+  const { weather, weatherLoading, weatherError, destination, days, startDate } = state.setup;
   const ctx = CONTEXTS[state.setup.context];
+  const today = todayStr();
+  const dateNote = startDate && startDate !== today
+    ? `<div class="weather-date-note">📅 ab ${formatDate(startDate)}</div>` : '';
 
   let weatherHtml = '';
   if (weatherLoading) {
-    weatherHtml = `<div class="weather-loading">Wetter wird geladen…</div>`;
+    weatherHtml = `${dateNote}<div class="weather-loading">Wetter wird geladen…</div>`;
   } else if (weatherError) {
-    weatherHtml = `<div class="weather-error">⚠️ ${escHtml(weatherError)}</div>`;
+    weatherHtml = `${dateNote}<div class="weather-error">⚠️ ${escHtml(weatherError)}</div>`;
   } else if (weather) {
-    const shown = weather.forecast.slice(0, Math.min(days, 7));
     const DAYS_DE = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
-    weatherHtml = `
-      <div class="weather-location">📍 ${escHtml(weather.location.name)}, ${weather.location.country.toUpperCase()}</div>
-      <div class="weather-scroll">
-        ${shown.map(d => {
-          const dow = DAYS_DE[new Date(d.date + 'T12:00:00').getDay()];
-          return `
-            <div class="weather-day">
-              <div class="wd-dow">${dow}</div>
-              <div class="wd-icon">${d.icon}</div>
-              <div class="wd-max">${d.max}°</div>
-              <div class="wd-min">${d.min}°</div>
-            </div>`;
-        }).join('')}
-      </div>`;
+    if (weather.isLayover) {
+      weatherHtml = `
+        ${dateNote}
+        <div class="layover-weather">
+          ${weather.stops.map(s => `
+            <div class="lw-stop">
+              <div class="lw-stop-label">${countryFlag(s.country)}&nbsp;<strong>${escHtml(s.iata)}</strong>&nbsp;${escHtml(s.city)}</div>
+              ${s.day ? `
+                <div class="lw-stop-day">
+                  <span class="lw-dow">${DAYS_DE[new Date(s.day.date + 'T12:00:00').getDay()]}</span>
+                  <span class="lw-icon">${s.day.icon}</span>
+                  <span class="lw-temp">${s.day.max}° <span class="lw-min">${s.day.min}°</span></span>
+                </div>` : `<span class="lw-na">–</span>`}
+            </div>`).join('')}
+        </div>`;
+    } else {
+      const shown = weather.forecast.slice(0, days);
+      weatherHtml = `
+        ${dateNote}
+        <div class="weather-location">📍 ${escHtml(weather.location.name)}, ${weather.location.country.toUpperCase()}</div>
+        <div class="weather-scroll">
+          ${shown.map(d => {
+            const dow = DAYS_DE[new Date(d.date + 'T12:00:00').getDay()];
+            return `
+              <div class="weather-day">
+                <div class="wd-dow">${dow}</div>
+                <div class="wd-icon">${d.icon}</div>
+                <div class="wd-max">${d.max}°</div>
+                <div class="wd-min">${d.min}°</div>
+              </div>`;
+          }).join('')}
+        </div>`;
+    }
   } else if (destination) {
-    weatherHtml = `<div class="weather-loading">Wetter lädt…</div>`;
+    weatherHtml = `${dateNote}<div class="weather-loading">Wetter lädt…</div>`;
   } else {
     weatherHtml = `<div class="weather-error">Kein Zielort angegeben</div>`;
   }
 
   const sportsStr = state.setup.sports.map(s => SPORTS.find(x => x.id === s)?.label).filter(Boolean).join(', ');
+  const dresscodeStr = state.setup.dresscodes.map(d => DRESSCODES.find(x => x.id === d)?.label).filter(Boolean).join(', ');
 
   return `
     <div class="screen">
       <div class="nav-bar">
         <button class="btn-back" data-action="setup-back">←</button>
-        <span class="nav-title">${ctx.emoji} ${destination || '—'} · ${days} Tag${days !== 1 ? 'e' : ''}</span>
+        <span class="nav-title">${ctx.emoji} ${escHtml(destination || '—')} · ${days} Tag${days !== 1 ? 'e' : ''}</span>
       </div>
       <div class="section-title">Wetter vor Ort</div>
       <div class="card weather-card">${weatherHtml}</div>
       ${sportsStr ? `<div class="summary-row">🏅 ${escHtml(sportsStr)}</div>` : ''}
+      ${dresscodeStr ? `<div class="summary-row">👔 ${escHtml(dresscodeStr)}</div>` : ''}
       <button class="btn-primary" data-action="create-trip">Liste erstellen ✓</button>
     </div>`;
 }
@@ -304,17 +475,29 @@ function renderList() {
   const { packed, total } = tripProgress(trip);
   const pct = total ? Math.round((packed / total) * 100) : 0;
 
-  const weather = trip.weather?.forecast;
+  const tripWeather = trip.weather;
   const DAYS_DE = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
-  const weatherStrip = weather ? `
-    <div class="weather-strip">
-      ${weather.slice(0, Math.min(trip.days, 5)).map(d => {
-        const dow = DAYS_DE[new Date(d.date + 'T12:00:00').getDay()];
-        return `<div class="ws-day"><span class="ws-icon">${d.icon}</span><span class="ws-temp">${d.max}°</span><span class="ws-dow">${dow}</span></div>`;
-      }).join('')}
-    </div>` : '';
+  let weatherStrip = '';
+  if (tripWeather?.isLayover && tripWeather.stops?.length) {
+    weatherStrip = `
+      <div class="weather-strip">
+        ${tripWeather.stops.filter(s => s.day).map(s => `
+          <div class="ws-day">
+            <span class="ws-icon">${s.day.icon}</span>
+            <span class="ws-temp">${s.day.max}°</span>
+            <span class="ws-dow">${DAYS_DE[new Date(s.day.date + 'T12:00:00').getDay()]} · ${s.iata}</span>
+          </div>`).join('')}
+      </div>`;
+  } else if (tripWeather?.forecast?.length) {
+    weatherStrip = `
+      <div class="weather-strip">
+        ${tripWeather.forecast.slice(0, Math.min(trip.days, 5)).map(d => {
+          const dow = DAYS_DE[new Date(d.date + 'T12:00:00').getDay()];
+          return `<div class="ws-day"><span class="ws-icon">${d.icon}</span><span class="ws-temp">${d.max}°</span><span class="ws-dow">${dow}</span></div>`;
+        }).join('')}
+      </div>`;
+  }
 
-  // Group items by category, separate vorOrt
   const activeItems = trip.items.filter(i => !i.vorOrt);
   const vorOrtItems = trip.items.filter(i => i.vorOrt);
 
@@ -329,23 +512,30 @@ function renderList() {
     .map(cat => {
       const catItems = byCategory[cat];
       const catPacked = catItems.filter(i => i.eingepackt).length;
+      const allPacked = catPacked === catItems.length;
       return `
         <div class="category-section">
           <div class="category-header">
             <span class="cat-name">${cat.toUpperCase()}</span>
-            <span class="cat-count">${catPacked}/${catItems.length}</span>
+            <div class="cat-header-right">
+              ${!allPacked ? `<button class="btn-check-all" data-action="check-all-cat" data-cat="${escAttr(cat)}">✓ alle</button>` : ''}
+              <span class="cat-count">${catPacked}/${catItems.length}</span>
+            </div>
           </div>
           ${catItems.map(i => renderItemRow(i)).join('')}
         </div>`;
     }).join('');
 
+  const isCamper = trip.context === 'camper';
+  const vorOrtVisible = state.vorOrtExpanded ?? isCamper;
+  const vorOrtLabel = isCamper ? '🚐 IN DER CONNI – prüfen' : '📍 VOR ORT';
   const vorOrtSection = vorOrtItems.length ? `
     <div class="category-section vor-ort-section">
       <div class="category-header vor-ort-header" data-action="toggle-vor-ort">
-        <span class="cat-name">📍 VOR ORT</span>
-        <span class="cat-toggle">${state.vorOrtExpanded ? '▲' : '▼'} ${vorOrtItems.length}</span>
+        <span class="cat-name">${vorOrtLabel}</span>
+        <span class="cat-toggle">${vorOrtVisible ? '▲' : '▼'} ${vorOrtItems.length}</span>
       </div>
-      ${state.vorOrtExpanded ? vorOrtItems.map(i => renderItemRow(i, true)).join('') : ''}
+      ${vorOrtVisible ? vorOrtItems.map(i => renderItemRow(i, true)).join('') : ''}
     </div>` : '';
 
   return `
@@ -484,10 +674,17 @@ function handleClick(e) {
   const action = btn.dataset.action;
 
   switch (action) {
+
     case 'new-trip':
       state.view = 'setup';
       state.setupStep = 1;
-      state.setup = { context: null, destination: '', days: 3, sports: [], weather: null, weatherLoading: false, weatherError: null };
+      state.setup = {
+        context: null, destination: '', startDate: todayStr(),
+        days: 3, layoverDuration: '72h', sports: [], dresscodes: [],
+        waschen: true, laptop: false, uniformiert: true,
+        stops: [], acQuery: '', acResults: [], focusIata: false,
+        weather: null, weatherLoading: false, weatherError: null
+      };
       render(); break;
 
     case 'open-trip':
@@ -517,18 +714,30 @@ function handleClick(e) {
 
     case 'select-context':
       state.setup.context = btn.dataset.context;
+      state.setupStep = 2;
       render(); break;
 
-    case 'setup-next':
+    case 'setup-next': {
       if (state.setupStep === 1 && !state.setup.context) return;
       if (state.setupStep === 2) {
-        state.setup.destination = document.getElementById('dest-input')?.value?.trim() || '';
+        const isLayover = state.setup.context === 'layover';
+        if (isLayover) {
+          const nf = state.setup.stops.filter(s => s.iata !== 'FRA');
+          if (!nf.length) return;
+          state.setup.destination = nf.map(s => s.iata).join(' – ');
+        } else {
+          state.setup.destination = document.getElementById('dest-input')?.value?.trim() || '';
+        }
       }
       state.setupStep++;
-      if (state.setupStep === 3 && state.setup.destination) {
-        loadWeatherAsync();
+      if (state.setupStep === 3) {
+        const isLayover = state.setup.context === 'layover';
+        if (isLayover ? state.setup.stops.length > 0 : state.setup.destination) {
+          loadWeatherAsync();
+        }
       }
       render(); break;
+    }
 
     case 'setup-back':
       if (state.setupStep > 1) { state.setupStep--; render(); }
@@ -551,11 +760,69 @@ function handleClick(e) {
       render(); break;
     }
 
+    case 'toggle-dresscode': {
+      const did = btn.dataset.dresscode;
+      const idx = state.setup.dresscodes.indexOf(did);
+      if (idx === -1) state.setup.dresscodes.push(did);
+      else state.setup.dresscodes.splice(idx, 1);
+      render(); break;
+    }
+
+    case 'toggle-waschen':
+      state.setup.waschen = !state.setup.waschen;
+      render(); break;
+
+    case 'toggle-laptop':
+      state.setup.laptop = !state.setup.laptop;
+      render(); break;
+
+    case 'toggle-uniformiert':
+      state.setup.uniformiert = !state.setup.uniformiert;
+      render(); break;
+
+    case 'check-all-cat': {
+      const cat = btn.dataset.cat;
+      const trip = currentTrip();
+      if (!trip) break;
+      for (const item of trip.items) {
+        if (item.category === cat && !item.vorOrt) {
+          item.eingepackt = true;
+          item.vorhanden = true;
+        }
+      }
+      saveState(); render(); break;
+    }
+
+    case 'select-airport': {
+      const { iata, city, country, lat, lon } = btn.dataset;
+      state.setup.stops.push({ iata, city, country, lat: parseFloat(lat), lon: parseFloat(lon) });
+      state.setup.acQuery = '';
+      state.setup.acResults = [];
+      state.setup.focusIata = true;
+      state.setup.days = layoverDays(state.setup.stops, state.setup.layoverDuration);
+      render(); break;
+    }
+
+    case 'remove-stop': {
+      const idx = parseInt(btn.dataset.stopIdx);
+      state.setup.stops.splice(idx, 1);
+      state.setup.focusIata = true;
+      state.setup.days = layoverDays(state.setup.stops, state.setup.layoverDuration);
+      render(); break;
+    }
+
+    case 'select-duration': {
+      state.setup.layoverDuration = btn.dataset.dur;
+      state.setup.days = layoverDays(state.setup.stops, btn.dataset.dur);
+      render(); break;
+    }
+
     case 'create-trip': {
       const trip = createTrip(state.setup);
       state.trips.push(trip);
       state.currentTripId = trip.id;
       state.view = 'list';
+      state.vorOrtExpanded = null;
       saveState();
       render(); break;
     }
@@ -577,9 +844,12 @@ function handleClick(e) {
       break;
     }
 
-    case 'toggle-vor-ort':
-      state.vorOrtExpanded = !state.vorOrtExpanded;
+    case 'toggle-vor-ort': {
+      const trip = currentTrip();
+      const defaultExpanded = trip?.context === 'camper';
+      state.vorOrtExpanded = !(state.vorOrtExpanded ?? defaultExpanded);
       render(); break;
+    }
 
     case 'expand-item': {
       const iid = btn.dataset.itemId;
@@ -637,6 +907,16 @@ function handleClick(e) {
 }
 
 function handleInput(e) {
+  if (e.target.dataset.action === 'iata-search') {
+    state.setup.acQuery = e.target.value;
+    state.setup.acResults = searchAirports(e.target.value);
+    renderAcDropdownOnly(); // partial update – no focus loss
+    return;
+  }
+  if (e.target.dataset.action === 'input-startdate') {
+    state.setup.startDate = e.target.value;
+    return;
+  }
   if (e.target.dataset.action === 'input-destination') {
     state.setup.destination = e.target.value;
   }
@@ -646,15 +926,64 @@ function handleInput(e) {
   }
 }
 
+// ─── Autocomplete dropdown (partial DOM update – no focus loss) ───────────────
+
+function renderAcDropdownOnly() {
+  const wrap = document.querySelector('.iata-wrap');
+  if (!wrap) return;
+  let dd = wrap.querySelector('.ac-dropdown');
+  const results = state.setup.acResults;
+  if (!results.length) {
+    if (dd) dd.remove();
+    return;
+  }
+  if (!dd) {
+    dd = document.createElement('div');
+    dd.className = 'ac-dropdown';
+    wrap.appendChild(dd);
+  }
+  dd.innerHTML = results.map(([iata, city, country, lat, lon]) => `
+    <button class="ac-item" data-action="select-airport"
+            data-iata="${iata}" data-city="${escAttr(city)}"
+            data-country="${escAttr(country)}"
+            data-lat="${lat}" data-lon="${lon}">
+      <span class="ac-flag">${countryFlag(country)}</span>
+      <span class="ac-iata">${iata}</span>
+      <span class="ac-city">${escHtml(city)}</span>
+    </button>`).join('');
+}
+
 // ─── Weather async load ───────────────────────────────────────────────────────
 
 function loadWeatherAsync() {
+  const isLayover = state.setup.context === 'layover';
+
   state.setup.weatherLoading = true;
   state.setup.weather = null;
   state.setup.weatherError = null;
   render();
 
-  getWeatherForTrip(state.setup.destination, state.setup.days)
+  const startDate = state.setup.startDate || todayStr();
+  const sd = startDate !== todayStr() ? startDate : null;
+  let promise;
+
+  if (isLayover) {
+    const nonFRA = state.setup.stops.filter(s => s.iata !== 'FRA');
+    if (!nonFRA.length) { state.setup.weatherLoading = false; render(); return; }
+    if (nonFRA.length === 1) {
+      // single destination → normal multi-day forecast
+      const s = nonFRA[0];
+      promise = getWeatherForTrip({ lat: s.lat, lon: s.lon, name: s.city, country: s.country }, state.setup.days, sd);
+    } else {
+      // multi-stop → 1 day per stop
+      promise = getWeatherForLayover(nonFRA, startDate);
+    }
+  } else {
+    if (!state.setup.destination) { state.setup.weatherLoading = false; render(); return; }
+    promise = getWeatherForTrip(state.setup.destination, state.setup.days, sd);
+  }
+
+  promise
     .then(weather => {
       state.setup.weather = weather;
       state.setup.weatherLoading = false;
@@ -669,6 +998,13 @@ function loadWeatherAsync() {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+function layoverDays(stops, duration) {
+  const nonFRA = stops.filter(s => s.iata !== 'FRA');
+  if (nonFRA.length >= 2) return nonFRA.length;
+  const map = { '24h': 1, '48h': 2, '72h': 3 };
+  return map[duration] ?? 1;
+}
+
 function findTripItem(id) {
   const trip = currentTrip();
   return trip?.items.find(i => i.id === id) ?? null;
@@ -676,6 +1012,38 @@ function findTripItem(id) {
 
 function findMasterItem(id) {
   return state.masterItems.find(i => i.id === id) ?? null;
+}
+
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function formatDate(iso) {
+  if (!iso) return '';
+  const [, m, d] = iso.split('-');
+  return `${d}.${m}.`;
+}
+
+function countryFlag(code) {
+  if (!code || code.length < 2) return '';
+  return [...code.toUpperCase().slice(0, 2)].map(c =>
+    String.fromCodePoint(c.charCodeAt(0) + 127397)
+  ).join('');
+}
+
+function searchAirports(q) {
+  if (!q || q.length < 2) return [];
+  const up = q.toUpperCase().trim();
+  const lo = q.toLowerCase().trim();
+  const exact = [], starts = [], contains = [];
+  for (const a of AIRPORTS) {
+    const [iata, city] = a;
+    if (iata === up)                                    { exact.push(a);    continue; }
+    if (iata.startsWith(up) || city.toLowerCase().startsWith(lo)) { starts.push(a);   continue; }
+    if (city.toLowerCase().includes(lo))                { contains.push(a); }
+  }
+  return [...exact, ...starts, ...contains].slice(0, 6);
 }
 
 function escHtml(str) {
@@ -689,6 +1057,7 @@ function escAttr(str) {
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
 function init() {
+  state.setup.startDate = todayStr();
   loadState();
   if (!state.masterItems) {
     state.masterItems = DEFAULT_ITEMS.map(i => ({ ...i }));
