@@ -129,7 +129,7 @@ function createTrip(setup) {
   const items = buildTripItems(setup.context, setup.days, {
     sports: setup.sports,
     dresscodes: setup.dresscodes || [],
-    waschen: setup.waschen ?? true,
+    waschen: setup.waschen ?? false,
     laptop: setup.laptop ?? false,
     uniformiert: setup.uniformiert ?? true,
     nonSchuko: setup.nonSchuko ?? false,
@@ -694,7 +694,7 @@ function handleClick(e) {
       state.setup = {
         context: null, destination: '', startDate: todayStr(),
         days: 3, layoverDuration: '72h', sports: [], dresscodes: [],
-        waschen: true, laptop: false, uniformiert: true, nonSchuko: false,
+        waschen: false, laptop: false, uniformiert: true, nonSchuko: false,
         stops: [], acQuery: '', acResults: [], focusIata: false,
         weather: null, weatherLoading: false, weatherError: null
       };
