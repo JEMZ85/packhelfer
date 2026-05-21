@@ -1,5 +1,7 @@
 // Packhelfer – main app
 
+const DATA_VERSION = 2; // bump when DEFAULT_ITEMS flags/structure changes
+
 // ─── State ────────────────────────────────────────────────────────────────────
 
 let state = {
@@ -35,6 +37,7 @@ let state = {
 
 function saveState() {
   const toSave = {
+    dataVersion: DATA_VERSION,
     currentTripId: state.currentTripId,
     trips: state.trips,
     masterItems: state.masterItems
@@ -49,7 +52,8 @@ function loadState() {
     const saved = JSON.parse(raw);
     state.currentTripId = saved.currentTripId ?? null;
     state.trips = saved.trips ?? [];
-    state.masterItems = saved.masterItems ?? null;
+    // Reset masterItems when data structure changes; trips are preserved
+    state.masterItems = (saved.dataVersion === DATA_VERSION) ? (saved.masterItems ?? null) : null;
     // migrate old context IDs
     for (const trip of state.trips) {
       if (trip.context === 'urlaub' || trip.context === 'wochenend') trip.context = 'reise';
