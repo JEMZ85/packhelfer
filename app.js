@@ -173,6 +173,7 @@ function render() {
 }
 
 function afterRender() {
+  if (state.view === 'home') initSwipeCards();
   if (state.view === 'setup' && state.setupStep === 2) {
     const dest = document.getElementById('dest-input');
     if (dest) dest.value = state.setup.destination;
@@ -185,11 +186,62 @@ function afterRender() {
   }
 }
 
+function initSwipeCards() {
+  const ACTIONS_W = 160; // 2 × 80px buttons
+
+  document.querySelectorAll('.swipe-wrap').forEach(wrap => {
+    const card = wrap.querySelector('.swipe-card');
+    if (!card) return;
+    let startX = 0, startY = 0, isOpen = false, moved = false;
+
+    card.addEventListener('touchstart', e => {
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+      moved = false;
+      card.style.transition = 'none';
+    }, { passive: true });
+
+    card.addEventListener('touchmove', e => {
+      const dx = e.touches[0].clientX - startX;
+      const dy = e.touches[0].clientY - startY;
+      if (!moved && Math.abs(dy) > Math.abs(dx)) return; // vertical scroll
+      if (Math.abs(dx) > 5) moved = true;
+      const base = isOpen ? -ACTIONS_W : 0;
+      const clamped = Math.min(0, Math.max(-ACTIONS_W, base + dx));
+      card.style.transform = `translateX(${clamped}px)`;
+    }, { passive: true });
+
+    card.addEventListener('touchend', e => {
+      const dx = e.changedTouches[0].clientX - startX;
+      const base = isOpen ? -ACTIONS_W : 0;
+      card.style.transition = 'transform 0.25s ease';
+      if (base + dx < -(ACTIONS_W / 2)) {
+        card.style.transform = `translateX(${-ACTIONS_W}px)`;
+        isOpen = true;
+      } else {
+        card.style.transform = 'translateX(0)';
+        isOpen = false;
+      }
+    });
+
+    // suppress navigation click when swiped or open
+    card.addEventListener('click', e => {
+      if (moved || isOpen) {
+        card.style.transition = 'transform 0.25s ease';
+        card.style.transform = 'translateX(0)';
+        isOpen = false;
+        moved = false;
+        e.stopPropagation();
+      }
+    });
+  });
+}
+
 // ── Home ──────────────────────────────────────────────────────────────────────
 
 function renderHome() {
   const trip = currentTrip();
-  const pastTrips = state.trips.filter(t => t.id !== state.currentTripId).slice(-5).reverse();
+  const pastTrips = state.trips.filter(t => t.id !== state.currentTripId && !t.archived).slice(-5).reverse();
 
   const activeCard = trip ? (() => {
     const { packed, total } = tripProgress(trip);
@@ -224,10 +276,20 @@ function renderHome() {
       const ctx = CONTEXTS[t.context];
       const { packed, total } = tripProgress(t);
       return `
-        <div class="card past-trip" data-action="open-past" data-trip-id="${t.id}">
-          <div class="past-trip-row">
-            <span>${ctx.emoji} <strong>${escHtml(t.destination)}</strong></span>
-            <span class="past-meta">${t.days}T · ${packed}/${total}</span>
+        <div class="swipe-wrap">
+          <div class="swipe-actions">
+            <button class="swipe-btn swipe-archive" data-action="archive-trip" data-trip-id="${t.id}">
+              <span class="swipe-icon">📦</span>Archiv
+            </button>
+            <button class="swipe-btn swipe-delete" data-action="delete-trip" data-trip-id="${t.id}">
+              <span class="swipe-icon">🗑</span>Löschen
+            </button>
+          </div>
+          <div class="card past-trip swipe-card" data-action="open-past" data-trip-id="${t.id}">
+            <div class="past-trip-row">
+              <span>${ctx.emoji} <strong>${escHtml(t.destination)}</strong></span>
+              <span class="past-meta">${t.days}T · ${packed}/${total}</span>
+            </div>
           </div>
         </div>`;
     }).join('')}` : '';
@@ -710,6 +772,19 @@ function handleClick(e) {
       state.view = 'list';
       saveState();
       render(); break;
+    }
+
+    case 'archive-trip': {
+      const trip = state.trips.find(t => t.id === btn.dataset.tripId);
+      if (trip) { trip.archived = true; saveState(); render(); }
+      break;
+    }
+
+    case 'delete-trip': {
+      const tid = btn.dataset.tripId;
+      state.trips = state.trips.filter(t => t.id !== tid);
+      if (state.currentTripId === tid) state.currentTripId = null;
+      saveState(); render(); break;
     }
 
     case 'go-home':

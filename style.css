@@ -135,9 +135,46 @@ html, body {
 .trip-meta { font-size: 14px; color: var(--text2); margin-bottom: 10px; }
 
 .past-trip { cursor: pointer; }
-.past-trip:active { transform: scale(0.98); }
 .past-trip-row { display: flex; justify-content: space-between; align-items: center; }
 .past-meta { font-size: 13px; color: var(--text2); }
+
+/* ── Swipe-to-action (Past Trips) ─────────────────────────── */
+.swipe-wrap {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius);
+  margin-bottom: 10px;
+}
+.swipe-wrap .card {
+  margin-bottom: 0;
+  border-radius: var(--radius);
+  position: relative;
+  z-index: 1;
+  will-change: transform;
+}
+.swipe-actions {
+  position: absolute;
+  right: 0; top: 0; bottom: 0;
+  display: flex;
+  z-index: 0;
+}
+.swipe-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 80px;
+  border: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+  cursor: pointer;
+  line-height: 1.2;
+}
+.swipe-btn .swipe-icon { font-size: 18px; }
+.swipe-archive { background: #FF9500; }
+.swipe-delete  { background: #FF3B30; }
 
 .empty-state { text-align: center; padding: 24px 16px; }
 .empty-icon { font-size: 40px; margin-bottom: 8px; }
